@@ -27,11 +27,16 @@ class Scraper(threading.Thread):
     def run(self):
         while True:
             page = self.queue.get()
-            status_code, response_text = get_page(page)
-            if status_code == 200:
-                l = parse_list(response_text)
-                links = [parse_link(x) for x in l]
-                self.output.put(links)
+            status_code = 0
+            while status_code != 200:
+                try:
+                    status_code, response_text = get_page(page)
+                except:
+                    print(f'Error on page {page}, retrying in 0.1s')
+                    time.sleep(0.1)
+            l = parse_list(response_text)
+            links = [parse_link(x) for x in l]
+            self.output.put(links)
             self.queue.task_done()
 
 class Writer(threading.Thread):
@@ -62,6 +67,8 @@ class Counter(threading.Thread):
             with counter_lock:
                 self.pbar.update(counter - self.last)
                 self.last = counter
+            if self.pbar.n >= self.pbar.total:
+                break
             time.sleep(0.1)
 
 counter = 0
@@ -84,11 +91,12 @@ def main(num_of_links:int, num_of_pages:int, num_of_threads:int):
     w.start()
     
     c = Counter(num_of_links)
-    c.daemon = True
+    c.daemon = False
     c.start()
 
     input_queue.join()
     output_queue.join()
+    c.join()
 
 if __name__ == '__main__':
     num_of_links = 30010
